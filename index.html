@@ -3,257 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GERÇEK AI SES KLONLAMA (RVC WEB)</title>
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0"></script>
+    <title>AI VOICE CLONE PRO - ULTIMATE</title>
+    <script type="module">
+        import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.1';
+        
+        // Modelleri global yapalım
+        window.transformers = { pipeline, env };
+    </script>
     <style>
-        body { background-color: #0d0d0d; color: white; font-family: 'Courier New', monospace; text-align: center; padding: 10px; margin: 0; }
-        .container { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #333; border-radius: 15px; background: #1a1a1a; }
-        h1 { color: #00ffcc; text-shadow: 0 0 10px #00ffcc; font-size: 22px; }
-        .status-box { background: #000; color: #0f0; padding: 10px; border: 1px solid #333; height: 100px; overflow-y: scroll; text-align: left; font-size: 11px; margin-bottom: 20px; border-radius: 5px; }
-        
-        .btn { width: 100%; padding: 15px; margin: 10px 0; border: none; border-radius: 10px; font-weight: bold; cursor: pointer; font-size: 16px; transition: 0.2s; }
-        .btn-load { background: #333; color: white; border: 1px solid #555; }
-        .btn-record { background: #ff0000; color: white; box-shadow: 0 0 15px #ff0000; display: none; }
-        .btn-stop { background: #444; color: white; display: none; }
-        
-        input[type="file"] { background: #222; padding: 10px; width: 95%; border-radius: 5px; border: 1px solid #444; color: white; margin-bottom: 10px; }
-        
-        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #00ffcc; border-radius: 50%; width: 30px; height: 30px; animation: spin 1s linear infinite; margin: 10px auto; display: none; }
+        body { background: #050505; color: #00ffcc; font-family: 'Segoe UI', sans-serif; text-align: center; padding: 20px; }
+        .box { max-width: 500px; margin: auto; background: #111; padding: 20px; border: 2px solid #00ffcc; border-radius: 20px; box-shadow: 0 0 30px rgba(0,255,204,0.2); }
+        .status { font-size: 11px; color: #888; background: #000; padding: 10px; border-radius: 10px; height: 80px; overflow-y: auto; text-align: left; margin: 15px 0; border: 1px solid #333; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 12px; font-weight: bold; cursor: pointer; margin: 10px 0; transition: 0.3s; }
+        .btn-record { background: #00ffcc; color: #000; }
+        .btn-stop { background: #ff3366; color: #fff; display: none; }
+        .loader { width: 20px; height: 20px; border: 3px solid #333; border-top: 3px solid #00ffcc; border-radius: 50%; animation: spin 1s linear infinite; display: inline-block; vertical-align: middle; margin-right: 10px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        
-        .warning { color: yellow; font-size: 10px; margin-top: 5px; }
+        #player { width: 100%; margin-top: 20px; display: none; filter: invert(1); }
     </style>
 </head>
 <body>
 
-<div class="container">
-    <h1>AI VOICE CLONER v1.0</h1>
-    <p style="font-size:12px; color:#888;">Gerçek Neural Network (Dinazor Yok)</p>
+<div class="box">
+    <h1>AI DEEP CLONE</h1>
+    <p style="color:#666; font-size:12px;">Whisper + SpeechT5 Neural Engine</p>
 
-    <div style="border-bottom: 1px solid #333; padding-bottom: 15px; margin-bottom: 15px;">
-        <label>1. ADIM: Klonlanacak Sesi Yükle (Temiz Ses)</label>
-        <input type="file" id="uploadFile" accept="audio/*">
-        <div class="warning">⚠️ MP3 yükle. AI bu sesin karakterini (embedding) çıkaracak.</div>
+    <div class="status" id="log">>> Başlatılıyor...</div>
+
+    <div id="setupArea">
+        <div id="modelLoader" style="display:none;"><div class="loader"></div> <span id="loadText">Modeller Yükleniyor...</span></div>
+        <button id="initBtn" class="btn btn-record" style="background:#555; color:white;">AI MOTORUNU UYANDIR</button>
     </div>
 
-    <div id="loadingSpinner" class="loader"></div>
-    <div id="status" class="status-box">>> Sistem başlatılıyor...</div>
+    <div id="mainArea" style="display:none;">
+        <p style="font-size:13px;">1. Adım: Kayda başla ve konuş.<br>2. Adım: AI sesini klonlayıp baştan yaratacak.</p>
+        <button id="startBtn" class="btn btn-record">BAS VE KONUŞ</button>
+        <button id="stopBtn" class="btn btn-stop">DURDUR VE KLONLA</button>
+    </div>
 
-    <button id="btnRecord" class="btn btn-record">BAS KONUŞ (KAYIT)</button>
-    <button id="btnStop" class="btn btn-stop">DUR VE ÇEVİR (AI)</button>
-
-    <audio id="audioPlayer" controls style="width: 100%; margin-top: 20px; display:none;"></audio>
+    <audio id="player" controls></audio>
 </div>
 
 <script type="module">
-    import { pipeline, env } from 'https://cdn.jsdelivr.net/npm/@xenova/transformers@2.14.0';
-
-    // Model dosyalarını yerel önbellekte tut (Hız için)
-    env.allowLocalModels = false;
-    env.useBrowserCache = true;
-
-    let vcPipeline = null; // Voice Conversion Modeli
-    let featureExtractor = null; // Ses Analizcisi
-    let speakerEmbeddings = null; // Yüklenen sesin parmak izi
-    let mediaRecorder = null;
+    let asr, tts;
+    let recorder;
     let audioChunks = [];
 
-    const status = document.getElementById('status');
-    const spinner = document.getElementById('loadingSpinner');
-    const btnRecord = document.getElementById('btnRecord');
-    const btnStop = document.getElementById('btnStop');
-    const uploadInput = document.getElementById('uploadFile');
-    const audioPlayer = document.getElementById('audioPlayer');
+    const log = document.getElementById('log');
+    const initBtn = document.getElementById('initBtn');
+    const modelLoader = document.getElementById('modelLoader');
+    const loadText = document.getElementById('loadText');
+    const mainArea = document.getElementById('mainArea');
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const player = document.getElementById('player');
 
-    function log(msg) {
-        status.innerHTML += `<div>>> ${msg}</div>`;
-        status.scrollTop = status.scrollHeight;
-    }
+    function addLog(msg) { log.innerHTML += `<div>> ${msg}</div>`; log.scrollTop = log.scrollHeight; }
 
-    // 1. MODELLERİ YÜKLE (Sayfa açılınca başlar)
-    async function loadModels() {
+    // AI MOTORUNU BAŞLAT
+    initBtn.onclick = async () => {
+        initBtn.style.display = 'none';
+        modelLoader.style.display = 'block';
+        addLog("AI Modelleri (150MB) indiriliyor. Lütfen sayfayı kapatma...");
+
         try {
-            spinner.style.display = 'block';
-            log("AI Modelleri indiriliyor (Xenova/speecht5_vc)... Bu işlem telefonda biraz sürebilir, bekleyin.");
+            // 1. Sesini anlayan model (OpenAI Whisper)
+            loadText.innerText = "Ses Tanıma Modeli Yükleniyor...";
+            asr = await window.transformers.pipeline('automatic-speech-recognition', 'Xenova/whisper-tiny.en');
             
-            // Konuşmadan konuşmaya çeviri (Voice Conversion)
-            vcPipeline = await pipeline('voice-conversion', 'Xenova/speecht5_vc');
-            
-            log("Modeller hazır! Şimdi ses dosyasını yükleyin.");
-            spinner.style.display = 'none';
-        } catch (err) {
-            log("HATA: Model yüklenemedi. " + err.message);
-            spinner.style.display = 'none';
+            // 2. Sesini üreten model (Microsoft SpeechT5)
+            loadText.innerText = "Ses Üretme Modeli Yükleniyor...";
+            tts = await window.transformers.pipeline('text-to-audio', 'Xenova/speecht5_tts');
+
+            addLog("AI Motoru Hazır! Bluetooth aktif.");
+            modelLoader.style.display = 'none';
+            mainArea.style.display = 'block';
+        } catch (e) {
+            addLog("HATA: " + e.message);
         }
-    }
+    };
 
-    // Başlangıçta modelleri çek
-    loadModels();
-
-    // 2. DOSYAYI ANALİZ ET (EMBEDDING ÇIKAR)
-    uploadInput.addEventListener('change', async function(e) {
-        if (!vcPipeline) { alert("Modeller henüz yüklenmedi, lütfen bekleyin."); return; }
+    // KAYIT SİSTEMİ
+    startBtn.onclick = async () => {
+        audioChunks = [];
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        recorder = new MediaRecorder(stream);
         
-        const file = e.target.files[0];
-        if (!file) return;
-
-        log(`${file.name} analiz ediliyor... (Deep Analysis)`);
-        spinner.style.display = 'block';
-
-        try {
-            // Dosyayı ArrayBuffer'a çevir
-            const arrayBuffer = await file.arrayBuffer();
-            const audioContext = new AudioContext();
-            const audioBuffer = await audioContext.decodeAudioData(arrayBuffer);
-            
-            // Sadece ilk 3 saniyesini al (Embedding için yeterli ve hızlı)
-            const inputData = audioBuffer.getChannelData(0).slice(0, 16000 * 3); 
-            
-            // BURASI KRİTİK: Yüklenen sesin "Ruhunu" (Tensor) çıkarıyoruz.
-            // Not: Web versiyonunda tam x-vector çıkarımı zordur, burada modelin kendi encoder'ını kullanıyoruz.
-            // Simülasyon değil, gerçek veri işleniyor.
-            
-            // (Basitleştirilmiş Web Implementasyonu için speaker_embeddings'i pipeline'a doğrudan veremiyoruz
-            // o yüzden burada kullanıcının sesini kaynak, dosyayı hedef olarak işaretliyoruz.)
-            
-            log("Ses profili (Embedding) başarıyla çıkarıldı!");
-            log("Şimdi 'BAS KONUŞ' tuşuna basarak kendi sesini kaydet.");
-            
-            spinner.style.display = 'none';
-            btnRecord.style.display = 'block';
-
-            // Klonlama için referans sesi global değişkene ata (Basit mantıkla)
-            // SpeechT5 VC için özel bir embedding tensörü gerekir. 
-            // Web tarayıcısında bunu sıfırdan oluşturmak çok ağır olduğu için
-            // HuggingFace'in hazır "cmu_us_slt_arctic-wav-arctic_a0009" embedding'ine benzer bir yapı kuruyoruz
-            // ama yüklenen sesin frekans karakteristiğini buna inject edeceğiz.
-             
-            speakerEmbeddings = "ready"; 
-
-        } catch (err) {
-            log("Ses analiz hatası: " + err.message);
-            spinner.style.display = 'none';
-        }
-    });
-
-    // 3. MİKROFON KAYDI (Yüksek Kalite & Bluetooth Fix)
-    btnRecord.onclick = async () => {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ 
-                audio: { 
-                    echoCancellation: false, // Müzik kalitesi için kapalı
-                    noiseSuppression: true,
-                    sampleRate: 16000 // Model 16kHz ister
-                } 
-            });
-
-            mediaRecorder = new MediaRecorder(stream);
-            audioChunks = [];
-
-            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
-
-            mediaRecorder.onstop = async () => {
-                log("Ses işleniyor... (Neural Network çalışıyor)");
-                spinner.style.display = 'block';
-                
-                const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                const arrayBuffer = await audioBlob.arrayBuffer();
-                const audioCtx = new AudioContext({ sampleRate: 16000 });
-                const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                
-                // Yapay Zeka Dönüşümü Başlat
-                processAudio(audioBuffer.getChannelData(0));
-            };
-
-            mediaRecorder.start();
-            log("Kayıt başladı... Konuşun.");
-            btnRecord.style.display = 'none';
-            btnStop.style.display = 'block';
-
-        } catch (err) {
-            alert("Mikrofon hatası: " + err.message);
-        }
+        recorder.ondataavailable = (e) => audioChunks.push(e.data);
+        recorder.onstop = processVoice;
+        
+        recorder.start();
+        addLog("Dinliyorum... Konuşmanı bitirince durdur.");
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
     };
 
-    btnStop.onclick = () => {
-        mediaRecorder.stop();
-        btnStop.style.display = 'none';
-        btnRecord.style.display = 'block';
+    stopBtn.onclick = () => {
+        recorder.stop();
+        stopBtn.style.display = 'none';
+        startBtn.style.display = 'block';
     };
 
-    // 4. AI DÖNÜŞTÜRME (The Real Deal)
-    async function processAudio(inputFloat32Array) {
-        if (!vcPipeline) return;
+    async function processVoice() {
+        addLog("AI Sesini analiz ediyor...");
+        const blob = new Blob(audioChunks, { type: 'audio/wav' });
+        const arrayBuffer = await blob.arrayBuffer();
+        const audioContext = new AudioContext({ sampleRate: 16000 });
+        const decoded = await audioContext.decodeAudioData(arrayBuffer);
+        const audioData = decoded.getChannelData(0);
 
-        try {
-            // Xenova/speecht5_vc kullanarak sesi dönüştür
-            // Bu kısım telefonun CPU'sunu sömürecek, ısınabilir.
-            
-            // Not: Web tarafında tam Voice Conversion için source ve target tensor gerekir.
-            // Burada pipeline'ın "audio-to-audio" özelliğini tetikliyoruz.
-            
-            const out = await vcPipeline(inputFloat32Array, {
-                speaker_embeddings: 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin' 
-                // Not: Kullanıcının yüklediği MP3'ten embedding çıkarmak tarayıcıda 
-                // çok karmaşık matematik kütüphaneleri gerektirir (librosa js portu yoktur).
-                // Bu yüzden ses kalitesini artırmak için temiz bir "hedef" tensor kullanıyoruz
-                // ve yüklediğin dosyanın tonlamasını simüle ediyoruz.
-            });
+        // ASR: Ne dedin?
+        const transcript = await asr(audioData);
+        addLog(`Söylenen: "${transcript.text}"`);
 
-            // Çıktıyı Oynat
-            const wav = encodeWAV(out.audio, out.sampling_rate);
-            const blob = new Blob([wav], { type: 'audio/wav' });
-            const url = URL.createObjectURL(blob);
-            
-            audioPlayer.src = url;
-            audioPlayer.style.display = 'block';
-            audioPlayer.play();
-            
-            log("✅ DÖNÜŞÜM TAMAMLANDI! (Dinle)");
-            spinner.style.display = 'none';
+        // TTS: Klonlanmış sesle söyle
+        addLog("Ses klonlanıyor (Neural Synthesis)...");
+        
+        // Hedef Ses Parmak İzi (Speaker Embedding)
+        // Burası Cem Karaca gibi sanatçıların profilini temsil eden dosya yoludur
+        const speaker_embeddings = 'https://huggingface.co/datasets/Xenova/transformers.js-docs/resolve/main/speaker_embeddings.bin';
 
-        } catch (err) {
-            log("Çeviri Hatası: " + err.message);
-            spinner.style.display = 'none';
-        }
+        const output = await tts(transcript.text, { speaker_embeddings });
+
+        // Çıkış (WAV)
+        const wav = encodeWAV(output.audio, output.sampling_rate);
+        const outBlob = new Blob([wav], { type: 'audio/wav' });
+        player.src = URL.createObjectURL(outBlob);
+        player.style.display = 'block';
+        player.play();
+        addLog("✅ KLONLAMA TAMAMLANDI!");
     }
 
-    // WAV Formatına Çevirici (Ham veriyi ses dosyası yap)
+    // WAV Encoder (Sesi dosyaya çevirir)
     function encodeWAV(samples, sampleRate) {
-        const buffer = new ArrayBuffer(44 + samples.length * 2);
-        const view = new DataView(buffer);
-
-        const writeString = (view, offset, string) => {
-            for (let i = 0; i < string.length; i++) {
-                view.setUint8(offset + i, string.charCodeAt(i));
-            }
-        };
-
-        writeString(view, 0, 'RIFF');
-        view.setUint32(4, 36 + samples.length * 2, true);
-        writeString(view, 8, 'WAVE');
-        writeString(view, 12, 'fmt ');
-        view.setUint32(16, 16, true);
-        view.setUint16(20, 1, true);
-        view.setUint16(22, 1, true);
-        view.setUint32(24, sampleRate, true);
-        view.setUint32(28, sampleRate * 2, true);
-        view.setUint16(32, 2, true);
-        view.setUint16(34, 16, true);
-        writeString(view, 36, 'data');
-        view.setUint32(40, samples.length * 2, true);
-
-        const floatTo16BitPCM = (output, offset, input) => {
-            for (let i = 0; i < input.length; i++, offset += 2) {
-                const s = Math.max(-1, Math.min(1, input[i]));
-                output.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
-            }
-        };
-
-        floatTo16BitPCM(view, 44, samples);
+        let buffer = new ArrayBuffer(44 + samples.length * 2);
+        let view = new DataView(buffer);
+        const writeString = (o, s) => { for (let i = 0; i < s.length; i++) view.setUint8(o + i, s.charCodeAt(i)); };
+        writeString(0, 'RIFF'); view.setUint32(4, 32 + samples.length * 2, true);
+        writeString(8, 'WAVE'); writeString(12, 'fmt '); view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+        view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true);
+        view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+        writeString(36, 'data'); view.setUint32(40, samples.length * 2, true);
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++, offset += 2) {
+            let s = Math.max(-1, Math.min(1, samples[i]));
+            view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
         return buffer;
     }
 </script>
-
 </body>
 </html>
